@@ -1,7 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.CodeAnalysis.Scripting;
 using Movie.Models;
 using Movie.Repository;
 using Movie.ResponseDTO;
+
 
 namespace Movie.ControllerWeb
 {
@@ -16,79 +18,42 @@ namespace Movie.ControllerWeb
             _userRepository = userRepository;
         }
 
-        // Đăng ký người dùng
+        // POST: api/User/SignUp
         [HttpPost("SignUp")]
         public async Task<IActionResult> SignUp([FromBody] UserDTO userDTO)
         {
-            if (string.IsNullOrEmpty(userDTO.UserName) || string.IsNullOrEmpty(userDTO.Password) || string.IsNullOrEmpty(userDTO.Email))
-            {
-                return BadRequest("Thông tin không hợp lệ");
-            }
+            if (userDTO == null)
+                return BadRequest("Invalid user data");
 
-            // Kiểm tra xem tài khoản đã tồn tại chưa
-            var existingUser = await _userRepository.GetUserByUsernameAsync(userDTO.UserName);
+            var existingUser = await _userRepository.GetUserByUserNameAsync(userDTO.UserName);
             if (existingUser != null)
-            {
-                return BadRequest("Tên tài khoản đã tồn tại");
-            }
-
-            // Mã hóa mật khẩu (Sử dụng Bcrypt để mã hóa)
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(userDTO.Password);
+                return Conflict("Username already exists");
 
             var user = new User
             {
                 UserName = userDTO.UserName,
-                Password = passwordHash,
+                Password = userDTO.Password, 
                 Email = userDTO.Email
             };
 
             await _userRepository.CreateUserAsync(user);
 
-            return Ok(new
-            {
-                Message = "Đăng ký thành công",
-                User = new
-                {
-                    user.UserId,
-                    user.UserName,
-                    user.Email
-                }
-            });
+            return Ok("User created successfully");
         }
 
-        // Đăng nhập người dùng
+        // POST: api/User/Login
         [HttpPost("Login")]
-        public async Task<IActionResult> Login([FromBody] LoginDTO loginDTO)
+        public async Task<IActionResult> Login([FromBody] LoginDTO userDTO)
         {
-            if (string.IsNullOrEmpty(loginDTO.UserName) || string.IsNullOrEmpty(loginDTO.Password))
-            {
-                return BadRequest("Thông tin không hợp lệ");
-            }
+            if (userDTO == null)
+                return BadRequest("Invalid user data");
 
-            // Tìm kiếm tài khoản trong database
-            var user = await _userRepository.GetUserByUsernameAsync(loginDTO.UserName);
-            if (user == null)
-            {
-                return Unauthorized("Tài khoản không tồn tại");
-            }
+            var user = await _userRepository.GetUserByUserNameAsync(userDTO.UserName);
 
-            // Kiểm tra mật khẩu
-            if (!BCrypt.Net.BCrypt.Verify(loginDTO.Password, user.Password))
-            {
-                return Unauthorized("Mật khẩu không đúng");
-            }
+            if (user == null || user.Password != userDTO.Password)
+                return Unauthorized("Invalid username or password");
 
-            // Trả về thông tin người dùng khi đăng nhập thành công
-            return Ok(new
-            {
-                Message = "Đăng nhập thành công",
-                User = new
-                {
-                    user.UserId,
-                    user.UserName,
-                    user.Email
-                }
-            });
+            return Ok("Login successful");
         }
     }
 
