@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
 using Movie.Models;
 using Movie.RequestDTO;
 using Movie.ResponseDTO;
@@ -9,32 +11,11 @@ namespace Movie.Repository
     public class MovieRepository : IMovieRepository
     {
         private readonly movieDB _context;
-
-        public MovieRepository(movieDB context)
+        private readonly IWebHostEnvironment _environment;
+        public MovieRepository(movieDB context, IWebHostEnvironment environment)
         {
             _context = context;
-        }
-
-        public async Task<RequestMovieDTO> AddAsync(RequestMovieDTO movieDTO)
-        {
-            var movie = new Models.Movies
-            {
-                Title = movieDTO.Title,
-                Description = movieDTO.Description,
-                Rating = movieDTO.Rating,
-                PosterUrl = movieDTO.PosterUrl,
-                AvatarUrl = movieDTO.AvatarUrl,
-                LinkFilmUrl = movieDTO.LinkFilmUrl,
-                DirectorId = movieDTO.DirectorId,
-                IsHot = movieDTO.IsHot,
-                YearReleased = movieDTO.YearReleased,
-                Status = 1
-            };
-
-            _context.Movies.Add(movie);
-            await _context.SaveChangesAsync();
-
-            return movieDTO;
+            _environment = environment;
         }
 
         public async Task<RequestMovieDTO?> GetByIdAsync(int id)
@@ -58,6 +39,98 @@ namespace Movie.Repository
 
             };
         }
+
+        // Lưu ảnh vào thư mục chỉ định
+        private async Task<string> SaveFileAsync(IFormFile file, string folderName)
+        {
+            _environment.WebRootPath = "C:\\Users\\phlinh\\Documents\\C#\\Movie\\";
+            if (file == null) return null;
+
+            var folderPath = Path.Combine(_environment.WebRootPath, "Assets", folderName);
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+            var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+            var filePath = Path.Combine(folderPath, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Lưu đường dẫn  
+            return $" C:/Users/phlinh/Documents/C#/Movie/Assets/{folderName}/{fileName}";
+        }
+
+        //  Thêm phim
+        public async Task<RequestMovieDTO> AddAsync(RequestMovieDTO movieDTO, IFormFile posterFile, IFormFile avatarFile)
+        {
+            var posterUrl = await SaveFileAsync(posterFile, "Posters");
+            var avatarUrl = await SaveFileAsync(avatarFile, "Avatars");
+
+            var movie = new Movies
+            {
+                Title = movieDTO.Title,
+                Description = movieDTO.Description,
+                Rating = movieDTO.Rating,
+                PosterUrl = posterUrl,
+                AvatarUrl = avatarUrl,
+                LinkFilmUrl = movieDTO.LinkFilmUrl,              
+                DirectorId = movieDTO.DirectorId,
+                IsHot = movieDTO.IsHot,
+                YearReleased = movieDTO.YearReleased,
+                Status = 1
+            };
+
+            _context.Movies.Add(movie);
+            await _context.SaveChangesAsync();
+
+            movieDTO.PosterUrl = posterUrl;
+            movieDTO.AvatarUrl = avatarUrl;
+
+           
+            
+            //Xử lý thêm Category vào MovieCategory
+            if (movieDTO.CategoryIds != null && movieDTO.CategoryIds.Any())
+            {
+                string[] categoryId = movieDTO.CategoryIds.Split(',');
+
+                foreach (var category in categoryId)
+                {
+                    _context.MovieCategories.Add(new MovieCategory
+                    {
+                        MovieId = movie.MovieId,
+                        CategoriesId = Int32.Parse(category)
+                    });
+                }
+            }
+
+            //  Xử lý thêm Actor vào MovieActor
+            if (movieDTO.ActorIds != null && movieDTO.ActorIds.Any())
+            {
+                string[] actorId = movieDTO.ActorIds.Split(',');
+
+                foreach (var actor in actorId)
+                {
+                    _context.MovieActors.Add(new MovieActor
+                    {
+                        MovieId = movie.MovieId,
+                        ActorsId = Int32.Parse(actor)
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            movieDTO.PosterUrl = posterUrl;
+            movieDTO.AvatarUrl = avatarUrl;
+
+            return movieDTO;
+        }
+        
+
 
         // Sửa 
         public async Task<RequestMovieDTO?> UpdateAsync(RequestMovieDTO movieDTO)
@@ -145,47 +218,7 @@ namespace Movie.Repository
             }
             return null;
         }
-        //lich su xoa
-        public async Task<IEnumerable<RequestMovieDTO>> GetDeleteAsync()
-        {
-            var deletedMovie = await _context.Movies
-                .Include(m => m.Director)
-                .Include(m => m.MovieActors).ThenInclude(ma => ma.Actors)
-                .Include(m => m.MovieCategories).ThenInclude(mc => mc.Categories)
-                .Where(m => m.Status == 0)
-                .Select(m => new RequestMovieDTO
-                {
-                    MovieId = m.MovieId,
-                    Title = m.Title,
-                    Description = m.Description,
-                    Rating = m.Rating,
-                    PosterUrl = m.PosterUrl,
-                    AvatarUrl = m.AvatarUrl,
-                    LinkFilmUrl = m.LinkFilmUrl,
-                    DirectorId = m.DirectorId,
-                    Director = m.Director != null ? m.Director.NameDir : null,
-                    Actors = m.MovieActors.Select(ma => new RequestActorDTO
-                    {
-                        ActorsId = ma.Actors.ActorsId,
-                        NameAct = ma.Actors.NameAct
-                    }).ToList(),
-                    Categories = m.MovieCategories.Select(mc => new RequestCategoryDTO
-                    {
-                        CategoriesId = mc.Categories.CategoriesId,
-                        CategoryName = mc.Categories.CategoryName
-                    }).ToList()
-                }).ToListAsync();
-
-            return deletedMovie;
-        }
-
-        public async Task DeletedMovieAsync(int id)
-        {
-            var Movie = _context.Movies.Where(m => m.Status == 0);
-            _context.Movies.RemoveRange(Movie);
-            await _context.SaveChangesAsync();
-
-        }
+        
 
         public async Task<RequestMovieDTO> GetMovieByIdAsync(int id)
         {

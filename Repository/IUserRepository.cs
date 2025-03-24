@@ -5,7 +5,7 @@ namespace Movie.Repository
 {
     public interface IUserRepository
     {
-        Task<User?> GetUserByUsernameAsync(string username);
+        Task<User?> GetUserByUserNameAsync(string username);
         Task<User> CreateUserAsync(User user);
     }
 

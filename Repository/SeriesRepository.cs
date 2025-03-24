@@ -52,7 +52,7 @@ namespace Movie.Repository
             .Include(s => s.Director)
             .FirstOrDefaultAsync(s => s.SeriesId == id);
 
-            if (series == null) return null!;
+            if (series == null) return null;
 
             var seriesDTO = new RequestSeriesDTO
             {
@@ -74,7 +74,6 @@ namespace Movie.Repository
                         Title = e.Title ?? string.Empty,
                         LinkFilmUrl = e.LinkFilmUrl ?? string.Empty
                     }).ToListAsync(),
-                Season = series.Season ?? 1,
                 TotalEpisode = series.Status ?? 0,
                 Actors = series.SeriesActors.Select(sa => new RequestActorDTO
                 {
@@ -87,6 +86,5 @@ namespace Movie.Repository
             return seriesDTO;
         }
 
-        
     }
 }
